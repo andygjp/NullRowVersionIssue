@@ -3,6 +3,7 @@ namespace NullRowVersionIssue
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Runtime.CompilerServices;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ namespace NullRowVersionIssue
 
         public Tests(TestFixture fixture)
         {
+            Init.EnableLegacyRowVersionNullBehavior();
             this.fixture = fixture;
         }
 
@@ -56,6 +58,8 @@ namespace NullRowVersionIssue
         [Fact]
         public async Task Customer_without_default_address_uses_first_address()
         {
+            Init.EnableLegacyRowVersionNullBehavior();
+            
             var address = new Address
             {
                 Address1 = "8992",
@@ -102,12 +106,22 @@ namespace NullRowVersionIssue
         }
     }
 
+    public static class Init
+    {
+        [ModuleInitializer]
+        public static void EnableLegacyRowVersionNullBehavior()
+        {
+            AppContext.SetSwitch("Switch.Microsoft.Data.SqlClient.LegacyRowVersionNullBehavior", true);
+        }
+    }
+
     public class TestFixture : IAsyncLifetime
     {
         public DataContext DataContext { get; private set; }
 
         public Task InitializeAsync()
         {
+            Init.EnableLegacyRowVersionNullBehavior();
             DataContext = DataContextFactory.Create(ConnectionString());
             return DataContext.Database.EnsureCreatedAsync();
         }
@@ -138,6 +152,7 @@ namespace NullRowVersionIssue
             return new(new DbContextOptionsBuilder<DataContext>()
                 .UseSqlServer(connectionString, builder =>
                 {
+                    // Commenting out the line below prevents InvalidOperationException
                     builder.EnableRetryOnFailure();
                 })
                 .EnableDetailedErrors()
