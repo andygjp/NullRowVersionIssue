@@ -12,7 +12,11 @@ The test called "Customer_without_default_address_uses_first_address" fails.
 The test can be made to pass if the version of Microsoft.Data.SqlClient is downgraded from 
 version 3.0.0 to 2.1.3 or line 156, `builder.EnableRetryOnFailure();`, is commented out.
 
-The test called "Customer_without_default_address_uses_first_address_using_datareader" fails.
+The test called "Customer_without_default_address_uses_first_address_using_datareader_GetFieldValue" fails.
+The test can be made to pass if the version of Microsoft.Data.SqlClient is downgraded from
+version 3.0.0 to 2.1.3
+
+The test called "Customer_without_default_address_uses_first_address_using_datareader_GetValues" fails.
 The test can be made to pass if the version of Microsoft.Data.SqlClient is downgraded from
 version 3.0.0 to 2.1.3
 

@@ -4,7 +4,6 @@ namespace NullRowVersionIssue
     using System.Collections.Generic;
     using System.Data.Common;
     using System.Linq;
-    using System.Runtime.CompilerServices;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using Microsoft.EntityFrameworkCore;
@@ -18,7 +17,6 @@ namespace NullRowVersionIssue
 
         public Tests(TestFixture fixture, ITestOutputHelper outputHelper)
         {
-            Init.EnableLegacyRowVersionNullBehavior();
             this.fixture = fixture;
             this.outputHelper = outputHelper;
         }
@@ -62,8 +60,6 @@ namespace NullRowVersionIssue
         [Fact]
         public async Task Customer_without_default_address_uses_first_address()
         {
-            Init.EnableLegacyRowVersionNullBehavior();
-            
             var address = new Address
             {
                 Address1 = "8992",
@@ -87,10 +83,8 @@ namespace NullRowVersionIssue
         }
 
         [Fact]
-        public async Task Customer_without_default_address_uses_first_address_using_datareader()
+        public async Task Customer_without_default_address_uses_first_address_using_datareader_GetFieldValue()
         {
-            Init.EnableLegacyRowVersionNullBehavior();
-            
             var address = new Address
             {
                 Address1 = "8992",
@@ -110,8 +104,7 @@ namespace NullRowVersionIssue
             Assert.True(customer.Id > 0);
             Assert.True(address.Id > 0);
 
-            var connection = await OpenConnectionAsync();
-            var command = connection.CreateCommand();
+            var command = GetConnection().CreateCommand();
             command.CommandText = GetDefaultOrFirstAddressQuery(customer).ToQueryString();
             outputHelper.WriteLine(command.CommandText);
             var reader = await command.ExecuteReaderAsync();
@@ -132,6 +125,53 @@ namespace NullRowVersionIssue
             Assert.Null(ex);
         }
 
+        [Fact]
+        public async Task Customer_without_default_address_uses_first_address_using_datareader_GetValues()
+        {
+            var address = new Address
+            {
+                Address1 = "8992",
+                Address2 = "Test Avenue"
+            };
+            var customer = new Customer
+            {
+                Name = "John Smith",
+                Addresses =
+                {
+                    address,
+                }
+            };
+            AddCustomer(customer);
+            await SaveChangesAsync();
+            
+            Assert.True(customer.Id > 0);
+            Assert.True(address.Id > 0);
+
+            var command = GetConnection().CreateCommand();
+            command.CommandText = GetDefaultOrFirstAddressQuery(customer).ToQueryString();
+            outputHelper.WriteLine(command.CommandText);
+            var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+
+            var ex = Record.Exception(() =>
+            {
+                // The select case looks like this:
+                // SELECT [c].[Id],
+                //   [a].[Id], [a].[Address1], [a].[Address2], [a].[Address3], [a].[CustomerId], [a].[Version],
+                //   [t0].[Id], [t0].[Address1], [t0].[Address2], [t0].[Address3], [t0].[CustomerId], [t0].[Version]
+                // Its the 6th index, [a].[Version], that is null
+                var data = new object[13];
+                reader.GetValues(data);
+                // Even with LegacyRowVersionNullBehavior enabled, the element at the 6th index is DbNull. In version
+                // 2.1.3 this would've been an empty byte array, so this flag doesn't really maintain backwards compatibility.
+                var bytes = (byte[]) data[6];
+                return bytes;
+            });
+
+            await reader.CloseAsync();
+            Assert.Null(ex);
+        }
+
         private void AddCustomer(Customer customer)
         {
             fixture.DataContext.Customers.Add(customer);
@@ -142,11 +182,9 @@ namespace NullRowVersionIssue
             return fixture.DataContext.SaveChangesAsync();
         }
 
-        private async Task<DbConnection> OpenConnectionAsync()
+        private DbConnection GetConnection()
         {
-            var connection = fixture.DataContext.Database.GetDbConnection();
-            await connection.OpenAsync();
-            return connection;
+            return fixture.DataContext.Database.GetDbConnection();
         }
 
         private async Task<Address> GetDefaultOrFirstAddress(Customer customer)
@@ -177,7 +215,6 @@ namespace NullRowVersionIssue
 
     public static class Init
     {
-        [ModuleInitializer]
         public static void EnableLegacyRowVersionNullBehavior()
         {
             AppContext.SetSwitch("Switch.Microsoft.Data.SqlClient.LegacyRowVersionNullBehavior", true);
@@ -188,15 +225,17 @@ namespace NullRowVersionIssue
     {
         public DataContext DataContext { get; private set; }
 
-        public Task InitializeAsync()
+        public async Task InitializeAsync()
         {
             Init.EnableLegacyRowVersionNullBehavior();
             DataContext = DataContextFactory.Create(ConnectionString());
-            return DataContext.Database.EnsureCreatedAsync();
+            await DataContext.Database.EnsureCreatedAsync();
+            await DataContext.Database.OpenConnectionAsync();
         }
 
         public async Task DisposeAsync()
         {
+            await DataContext.Database.CloseConnectionAsync();
             var deleted = await DataContext.Database.EnsureDeletedAsync();
             if (deleted is false) throw new InvalidOperationException("Database has not been deleted");
         }
