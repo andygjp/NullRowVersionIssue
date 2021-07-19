@@ -2,21 +2,25 @@ namespace NullRowVersionIssue
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using Microsoft.EntityFrameworkCore;
     using Xunit;
+    using Xunit.Abstractions;
 
     public class Tests : IClassFixture<TestFixture>
     {
         private readonly TestFixture fixture;
+        private readonly ITestOutputHelper outputHelper;
 
-        public Tests(TestFixture fixture)
+        public Tests(TestFixture fixture, ITestOutputHelper outputHelper)
         {
             Init.EnableLegacyRowVersionNullBehavior();
             this.fixture = fixture;
+            this.outputHelper = outputHelper;
         }
 
         [Fact]
@@ -82,6 +86,52 @@ namespace NullRowVersionIssue
             Assert.Same(address, await GetDefaultOrFirstAddress(customer));
         }
 
+        [Fact]
+        public async Task Customer_without_default_address_uses_first_address_V2()
+        {
+            Init.EnableLegacyRowVersionNullBehavior();
+            
+            var address = new Address
+            {
+                Address1 = "8992",
+                Address2 = "Test Avenue"
+            };
+            var customer = new Customer
+            {
+                Name = "John Smith",
+                Addresses =
+                {
+                    address,
+                }
+            };
+            AddCustomer(customer);
+            await SaveChangesAsync();
+            
+            Assert.True(customer.Id > 0);
+            Assert.True(address.Id > 0);
+
+            var connection = await OpenConnectionAsync();
+            var command = connection.CreateCommand();
+            command.CommandText = GetDefaultOrFirstAddressQuery(customer).ToQueryString();
+            outputHelper.WriteLine(command.CommandText);
+            var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+
+            var ex = Record.Exception(() =>
+            {
+                // The select case looks like this:
+                // SELECT [c].[Id],
+                //   [a].[Id], [a].[Address1], [a].[Address2], [a].[Address3], [a].[CustomerId], [a].[Version],
+                //   [t0].[Id], [t0].[Address1], [t0].[Address2], [t0].[Address3], [t0].[CustomerId], [t0].[Version]
+                // Its the 6th index, [a].[Version], that is null
+                var fieldValue = reader.GetFieldValue<byte[]>(6);
+                return fieldValue;
+            });
+
+            await reader.CloseAsync();
+            Assert.Null(ex);
+        }
+
         private void AddCustomer(Customer customer)
         {
             fixture.DataContext.Customers.Add(customer);
@@ -92,17 +142,36 @@ namespace NullRowVersionIssue
             return fixture.DataContext.SaveChangesAsync();
         }
 
+        private async Task<DbConnection> OpenConnectionAsync()
+        {
+            var connection = fixture.DataContext.Database.GetDbConnection();
+            await connection.OpenAsync();
+            return connection;
+        }
+
         private async Task<Address> GetDefaultOrFirstAddress(Customer customer)
         {
-            var data = await fixture.DataContext.Customers.Select(x => new
-                {
-                    x.Id,
-                    x.DefaultAddress,
-                    FallbackAddress = x.Addresses.OrderBy(y => y.Id).FirstOrDefault()
-                })
-                .FirstOrDefaultAsync(x => x.Id == customer.Id);
+            var data = await GetDefaultOrFirstAddressQuery(customer).FirstOrDefaultAsync();
             
             return data?.DefaultAddress ?? data?.FallbackAddress;
+        }
+
+        private IQueryable<Data> GetDefaultOrFirstAddressQuery(Customer customer)
+        {
+            return fixture.DataContext.Customers.Select(x => new Data
+                {
+                    Id = x.Id,
+                    DefaultAddress = x.DefaultAddress,
+                    FallbackAddress = x.Addresses.OrderBy(y => y.Id).FirstOrDefault()
+                })
+                .Where(x => x.Id == customer.Id);
+        }
+
+        private record Data
+        {
+            public int Id { get; init; }
+            public Address DefaultAddress { get; init; }
+            public Address FallbackAddress { get; init; }
         }
     }
 
