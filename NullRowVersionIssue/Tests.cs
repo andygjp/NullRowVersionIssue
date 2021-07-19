@@ -87,7 +87,7 @@ namespace NullRowVersionIssue
         }
 
         [Fact]
-        public async Task Customer_without_default_address_uses_first_address_V2()
+        public async Task Customer_without_default_address_uses_first_address_using_datareader()
         {
             Init.EnableLegacyRowVersionNullBehavior();
             
