@@ -136,7 +136,10 @@ namespace NullRowVersionIssue
         public static DataContext Create(string connectionString)
         {
             return new(new DbContextOptionsBuilder<DataContext>()
-                .UseSqlServer(connectionString)
+                .UseSqlServer(connectionString, builder =>
+                {
+                    builder.EnableRetryOnFailure();
+                })
                 .EnableDetailedErrors()
                 .EnableSensitiveDataLogging()
                 .Options);
