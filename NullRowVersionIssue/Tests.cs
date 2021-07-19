@@ -50,7 +50,7 @@ namespace NullRowVersionIssue
 
             Assert.True(customer.DefaultAddressId > 0);
 
-            Assert.Same(defaultAddress, GetDefaultOrFirstAddress(customer));
+            Assert.Same(defaultAddress, await GetDefaultOrFirstAddress(customer));
         }
 
         [Fact]
@@ -75,7 +75,7 @@ namespace NullRowVersionIssue
             Assert.True(customer.Id > 0);
             Assert.True(address.Id > 0);
 
-            Assert.Same(address, GetDefaultOrFirstAddress(customer));
+            Assert.Same(address, await GetDefaultOrFirstAddress(customer));
         }
 
         private void AddCustomer(Customer customer)
@@ -88,15 +88,15 @@ namespace NullRowVersionIssue
             return fixture.DataContext.SaveChangesAsync();
         }
 
-        private Address GetDefaultOrFirstAddress(Customer customer)
+        private async Task<Address> GetDefaultOrFirstAddress(Customer customer)
         {
-            var data = fixture.DataContext.Customers.Select(x => new
+            var data = await fixture.DataContext.Customers.Select(x => new
                 {
                     x.Id,
                     x.DefaultAddress,
                     FallbackAddress = x.Addresses.OrderBy(y => y.Id).FirstOrDefault()
                 })
-                .FirstOrDefault(x => x.Id == customer.Id);
+                .FirstOrDefaultAsync(x => x.Id == customer.Id);
             
             return data?.DefaultAddress ?? data?.FallbackAddress;
         }
@@ -159,7 +159,9 @@ namespace NullRowVersionIssue
             modelBuilder.Entity<Customer>().HasKey(x => x.Id);
             modelBuilder.Entity<Customer>().HasMany(x => x.Addresses).WithOne().HasForeignKey(x => x.CustomerId);
             modelBuilder.Entity<Customer>().HasOne(x => x.DefaultAddress).WithOne().HasForeignKey<Customer>(x => x.DefaultAddressId);
+            modelBuilder.Entity<Customer>().Property(x => x.Version).IsRowVersion();
             modelBuilder.Entity<Address>().HasKey(x => x.Id);
+            modelBuilder.Entity<Address>().Property(x => x.Version).IsRowVersion();
         }
     }
 
@@ -172,6 +174,7 @@ namespace NullRowVersionIssue
         
         public int? DefaultAddressId { get; set; }
         public virtual Address DefaultAddress { get; set; }
+        public byte[] Version { get; set; }
     }
 
     public class Address
@@ -181,5 +184,6 @@ namespace NullRowVersionIssue
         public string Address1 { get; set; }
         public string Address2 { get; set; }
         public string Address3 { get; set; }
+        public byte[] Version { get; set; }
     }
 }
