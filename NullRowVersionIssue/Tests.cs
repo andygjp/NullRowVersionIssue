@@ -172,6 +172,43 @@ namespace NullRowVersionIssue
             Assert.Null(ex);
         }
 
+        [Fact]
+        public void GetValues_null_rowversion_returns_empty_byte_array()
+        {
+            var con = GetConnection();
+            using var command = con.CreateCommand();
+            command.CommandText = "select cast(null as rowversion) rv";
+            using var reader = command.ExecuteReader();
+            reader.Read();
+            var data = new object[1];
+            reader.GetValues(data);
+            Assert.True(data[0] is byte[] {Length: 0});
+        }
+
+        [Fact]
+        public void GetValue_null_rowversion_returns_empty_byte_array()
+        {
+            var con = GetConnection();
+            using var command = con.CreateCommand();
+            command.CommandText = "select cast(null as rowversion) rv";
+            using var reader = command.ExecuteReader();
+            reader.Read();
+            var value = reader.GetValue(0);
+            Assert.True(value is byte[] {Length: 0});
+        }
+
+        [Fact]
+        public void GetFieldValue_null_rowversion_does_not_throw_invalid_cast()
+        {
+            var con = GetConnection();
+            using var command = con.CreateCommand();
+            command.CommandText = "select cast(null as rowversion) rv";
+            using var reader = command.ExecuteReader();
+            reader.Read();
+            var ex = Record.Exception(() => reader.GetFieldValue<byte[]>(0));
+            Assert.Null(ex);
+        }
+
         private void AddCustomer(Customer customer)
         {
             fixture.DataContext.Customers.Add(customer);
