@@ -2,6 +2,11 @@
 
 A project demonstrating an issue with Microsoft.Data.SqlClient 3.0.0 when using rowversion and SqlServerRetryingExecutionStrategy.
 
+# UPDATE
+
+As of 24/9/2021, [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient) has been updated to version 3.0.1 which includes a fix that resolves the issue.
+(https://github.com/dotnet/SqlClient/pull/1182 fix, planned for v4, was back-ported: https://github.com/dotnet/SqlClient/pull/1182.)
+
 # Instructions
 
 Assumes a sql server instance available at `Data Source=localhost;Initial Catalog=bcd4a8a01d8749789bc9683bdfa1bbee;User ID=sa;Password=!aWfa19!;Authentication=SqlPassword`.

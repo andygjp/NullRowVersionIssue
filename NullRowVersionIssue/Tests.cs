@@ -297,7 +297,6 @@ namespace NullRowVersionIssue
             return new(new DbContextOptionsBuilder<DataContext>()
                 .UseSqlServer(connectionString, builder =>
                 {
-                    // Commenting out the line below prevents InvalidOperationException
                     builder.EnableRetryOnFailure();
                 })
                 .EnableDetailedErrors()
